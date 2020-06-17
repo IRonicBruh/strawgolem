@@ -10,55 +10,35 @@ import com.commodorethrawn.strawgolem.entity.capability.lifespan.LifespanProvide
 import com.commodorethrawn.strawgolem.entity.capability.memory.IMemory;
 import com.commodorethrawn.strawgolem.entity.capability.memory.MemoryProvider;
 import net.minecraft.block.Block;
-import net.minecraft.block.StemGrownBlock;
+import net.minecraft.block.GourdBlock;
 import net.minecraft.entity.EntityType;
-import net.minecraft.entity.SharedMonsterAttributes;
-import net.minecraft.entity.ai.goal.AvoidEntityGoal;
-import net.minecraft.entity.ai.goal.LookAtGoal;
-import net.minecraft.entity.ai.goal.LookRandomlyGoal;
+import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.entity.ItemEntity;
+import net.minecraft.entity.ai.goal.FleeEntityGoal;
+import net.minecraft.entity.ai.goal.LookAroundGoal;
+import net.minecraft.entity.ai.goal.LookAtEntityGoal;
 import net.minecraft.entity.ai.goal.SwimGoal;
-import net.minecraft.entity.item.ItemEntity;
-import net.minecraft.entity.monster.MonsterEntity;
+import net.minecraft.entity.attribute.EntityAttributes;
+import net.minecraft.entity.damage.DamageSource;
+import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.passive.GolemEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
-import net.minecraft.util.DamageSource;
-import net.minecraft.util.Hand;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.SoundEvent;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import net.minecraftforge.items.IItemHandler;
 
-import javax.annotation.Nullable;
-
 public class EntityStrawGolem extends GolemEntity {
-	
-	public static final ResourceLocation LOOT = new ResourceLocation(Strawgolem.MODID, "strawgolem");
+
+    public static final Identifier LOOT = new Identifier(Strawgolem.MODID, "strawgolem");
     public IItemHandler inventory;
     private ILifespan lifespan;
     private IMemory memory;
 
     @Override
-    protected ResourceLocation getLootTable() {
+    protected Identifier getLootTableId() {
         return LOOT;
-    }
-
-    @Override
-    @Nullable
-    protected SoundEvent getAmbientSound() {
-        return null; // TODO
-    }
-
-    @Override
-    @Nullable
-    protected SoundEvent getDeathSound() {
-        return null; // TODO
-    }
-
-    @Override
-    public int getTalkInterval() {
-        return 120;
     }
 
     public EntityStrawGolem(EntityType<? extends EntityStrawGolem> type, World worldIn) {
@@ -67,22 +47,23 @@ public class EntityStrawGolem extends GolemEntity {
 	}
 
     @Override
-    protected void registerAttributes() {
-        super.registerAttributes();
-        this.getAttribute(SharedMonsterAttributes.MAX_HEALTH).setBaseValue(2.0D);
-        this.getAttribute(SharedMonsterAttributes.MOVEMENT_SPEED).setBaseValue(0.25D);
+    protected void initAttributes() {
+        super.initAttributes();
+        this.getAttributeInstance(EntityAttributes.MAX_HEALTH).setBaseValue(2.0D);
+        this.getAttributeInstance(EntityAttributes.MOVEMENT_SPEED).setBaseValue(0.25D);
+
     }
 
     @Override
-    protected void registerGoals() {
+    protected void initGoals() {
         int priority = 0;
-        this.goalSelector.addGoal(priority, new SwimGoal(this));
-        this.goalSelector.addGoal(++priority, new AvoidEntityGoal<>(this, MonsterEntity.class, 10.0F, 0.6D, 0.75D));
-        this.goalSelector.addGoal(++priority, new GolemHarvestGoal(this, 0.6D));
-        this.goalSelector.addGoal(++priority, new GolemDeliverGoal(this, 0.6D));
-        this.goalSelector.addGoal(++priority, new GolemWanderGoal(this, 0.5D));
-        this.goalSelector.addGoal(++priority, new LookAtGoal(this, PlayerEntity.class, 5.0F));
-        this.goalSelector.addGoal(++priority, new LookRandomlyGoal(this));
+        this.goalSelector.add(priority, new SwimGoal(this));
+        this.goalSelector.add(++priority, new FleeEntityGoal(this, Monster.class, 10.0F, 0.6D, 0.75D));
+        this.goalSelector.add(++priority, new GolemHarvestGoal(this, 0.6D));
+        this.goalSelector.add(++priority, new GolemDeliverGoal(this, 0.6D));
+        this.goalSelector.add(++priority, new GolemWanderGoal(this, 0.5D));
+        this.goalSelector.add(++priority, new LookAtEntityGoal(this, PlayerEntity.class, 5.0F));
+        this.goalSelector.add(++priority, new LookAroundGoal(this));
     }
 
     @Override
@@ -99,35 +80,35 @@ public class EntityStrawGolem extends GolemEntity {
         if (holdingBlockCrop()) lifespan.update();
 
         if (lifespan.isOver())
-            attackEntityFrom(DamageSource.MAGIC, getMaxHealth() * 100);
+            damage(DamageSource.MAGIC, getMaximumHealth() * 100);
     }
 
     @Override
-    protected void onDeathUpdate() {
-        ItemEntity heldItem = new ItemEntity(this.world, this.lastTickPosX, this.lastTickPosY, this.lastTickPosZ, this.getHeldItem(Hand.MAIN_HAND));
-        this.getEntityWorld().addEntity(heldItem);
-        super.onDeathUpdate();
+    public void onDeath(DamageSource source) {
+        ItemEntity heldItem = new ItemEntity(this.world, this.prevX, this.prevY, this.prevZ, this.getEquippedStack(EquipmentSlot.MAINHAND));
+        this.getEntityWorld().spawnEntity(heldItem);
+        super.onDeath(source);
     }
 
     @Override
-    public boolean canDespawn(double distanceToClosestPlayer) {
-        return false;
+    public boolean cannotDespawn() {
+        return true;
     }
 
     public boolean isHandEmpty() {
-        return getHeldItemMainhand().isEmpty();
+        return getEquippedStack(EquipmentSlot.MAINHAND).isEmpty();
     }
 
     @Override
-    public ItemStack getHeldItem(Hand hand) {
-        if (hand == Hand.MAIN_HAND) {
+    public ItemStack getEquippedStack(EquipmentSlot slot) {
+        if (slot == EquipmentSlot.MAINHAND) {
             return inventory.getStackInSlot(0);
         }
         return ItemStack.EMPTY;
     }
 
     public boolean holdingBlockCrop() {
-        return Block.getBlockFromItem(inventory.getStackInSlot(0).getItem()) instanceof StemGrownBlock;
+        return Block.getBlockFromItem(inventory.getStackInSlot(0).getItem()) instanceof GourdBlock;
     }
 
     public void addChestPos(BlockPos pos) {
@@ -136,7 +117,7 @@ public class EntityStrawGolem extends GolemEntity {
     }
 
     public BlockPos getChestPos() {
-        return memory.getClosestPosition(this.getPosition());
+        return memory.getClosestPosition(this.getBlockPos());
     }
 
     public void removeChestPos(BlockPos pos) {

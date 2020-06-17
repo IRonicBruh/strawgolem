@@ -1,11 +1,11 @@
 package com.commodorethrawn.strawgolem.entity.ai;
 
 import com.commodorethrawn.strawgolem.entity.EntityStrawGolem;
-import net.minecraft.entity.ai.goal.WaterAvoidingRandomWalkingGoal;
+import net.minecraft.entity.ai.goal.WanderAroundGoal;
 
-public class GolemWanderGoal extends WaterAvoidingRandomWalkingGoal {
+public class GolemWanderGoal extends WanderAroundGoal {
 
-    private EntityStrawGolem strawGolem;
+    private final EntityStrawGolem strawGolem;
 
     public GolemWanderGoal(EntityStrawGolem creature, double speedIn) {
         super(creature, speedIn);
@@ -13,7 +13,7 @@ public class GolemWanderGoal extends WaterAvoidingRandomWalkingGoal {
     }
 
     @Override
-    public boolean shouldExecute() {
-        return strawGolem.getHeldItemMainhand().isEmpty() && super.shouldExecute();
+    public boolean canStart() {
+        return strawGolem.isHandEmpty() && super.canStart();
     }
 }

@@ -1,98 +1,102 @@
 package com.commodorethrawn.strawgolem.entity.ai;
 
-import com.commodorethrawn.strawgolem.config.StrawgolemConfig;
+import com.commodorethrawn.strawgolem.config.ConfigHelper;
 import com.commodorethrawn.strawgolem.entity.EntityStrawGolem;
 import net.minecraft.block.*;
-import net.minecraft.entity.ai.goal.MoveToBlockGoal;
-import net.minecraft.entity.item.ItemEntity;
-import net.minecraft.item.*;
-import net.minecraft.util.math.AxisAlignedBB;
+import net.minecraft.entity.ItemEntity;
+import net.minecraft.entity.ai.goal.MoveToTargetPosGoal;
+import net.minecraft.item.BlockItem;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.RayTraceContext;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.IWorldReader;
-import net.minecraft.world.server.ServerWorld;
+import net.minecraft.world.RayTraceContext;
+import net.minecraft.world.WorldView;
 
 import java.util.List;
 
-public class GolemHarvestGoal extends MoveToBlockGoal {
-	private EntityStrawGolem strawgolem;
+public class GolemHarvestGoal extends MoveToTargetPosGoal {
+    private final EntityStrawGolem strawgolem;
 
     public GolemHarvestGoal(EntityStrawGolem strawgolem, double speedIn) {
-        super(strawgolem, speedIn, StrawgolemConfig.getSearchRangeHorizontal(), StrawgolemConfig.getSearchRangeVertical());
-		this.strawgolem = strawgolem;
-	}
+        super(strawgolem, speedIn, ConfigHelper.getSearchRangeHorizontal(), ConfigHelper.getSearchRangeVertical());
+        this.strawgolem = strawgolem;
+    }
 
     @Override
-	public boolean shouldExecute() {
-        if (super.shouldExecute() && strawgolem.isHandEmpty()) {
-			this.runDelay = 0;
-			return true;
-		} else return false;
-	}
+    public boolean canStart() {
+        if (super.canStart() && strawgolem.isHandEmpty()) {
+            this.cooldown = 0;
+            return true;
+        } else return false;
+    }
 
     @Override
 	public void tick() {
-        this.strawgolem.getLookController().setLookPosition(
-                this.destinationBlock.getX() + 0.5D,
-                this.destinationBlock.getY(),
-                this.destinationBlock.getZ() + 0.5D,
+        this.strawgolem.getLookControl().lookAt(
+                this.targetPos.getX() + 0.5D,
+                this.targetPos.getY(),
+                this.targetPos.getZ() + 0.5D,
                 10.0F,
-                this.strawgolem.getVerticalFaceSpeed());
-        double targetDistance = strawgolem.world.getBlockState(destinationBlock).getBlock() instanceof StemGrownBlock ? getTargetDistanceSq() + 0.2D : getTargetDistanceSq();
-        if (!this.destinationBlock.withinDistance(this.creature.getPositionVec(), targetDistance)) {
-            ++this.timeoutCounter;
-            if (this.shouldMove()) {
-                this.creature.getNavigator().tryMoveToXYZ(this.destinationBlock.getX() + 0.5D, this.destinationBlock.getY() + 1D, this.destinationBlock.getZ() + 0.5D, this.movementSpeed);
+                this.strawgolem.getLookPitchSpeed());
+        double targetDistance = strawgolem.world.getBlockState(targetPos).getBlock() instanceof GourdBlock ? 1.2D : 1.0D;
+        if (!this.targetPos.isWithinDistance(this.strawgolem.getPos(), targetDistance)) {
+            ++this.tryingTime;
+            if (this.shouldResetPath()) {
+                this.strawgolem.getNavigation().startMovingTo(this.targetPos.getX() + 0.5D, this.targetPos.getY() + 1D, this.targetPos.getZ() + 0.5D, this.movementSpeed);
             }
         } else {
-            --this.timeoutCounter;
+            --this.tryingTime;
             doHarvest();
         }
     }
 
+
     @Override
-	protected boolean shouldMoveTo(IWorldReader worldIn, BlockPos pos) {
-        Vec3d posVec = strawgolem.getPositionVec();
+    protected boolean isTargetPos(WorldView worldIn, BlockPos pos) {
+        Vec3d posVec = strawgolem.getPos();
         if (posVec.getY() % 1 > 0.01) posVec = posVec.add(0, 1, 0);
-        RayTraceContext ctx = new RayTraceContext(posVec, new Vec3d(pos), RayTraceContext.BlockMode.COLLIDER, RayTraceContext.FluidMode.NONE, strawgolem);
-        if (!worldIn.rayTraceBlocks(ctx).getPos().equals(pos)) return false;
+        RayTraceContext ctx = new RayTraceContext(posVec, new Vec3d(pos), RayTraceContext.ShapeType.COLLIDER, RayTraceContext.FluidHandling.NONE, strawgolem);
+        if (!worldIn.rayTrace(ctx).getPos().equals(pos)) return false;
         BlockState block = worldIn.getBlockState(pos);
-        if (StrawgolemConfig.blockHarvestAllowed(block.getBlock())) {
-            if (block.getBlock() instanceof CropsBlock) {
-                return ((CropsBlock) block.getBlock()).isMaxAge(block);
-            } else if (block.getBlock() instanceof StemGrownBlock) {
+        if (ConfigHelperblockHarvestAllowed(block.getBlock())) {
+            if (block.getBlock() instanceof CropBlock) {
+                return ((CropBlock) block.getBlock()).isMature(block);
+            } else if (block.getBlock() instanceof GourdBlock) {
                 return true;
             } else if (block.getBlock() == Blocks.NETHER_WART) {
-                return block.getBlockState() == Blocks.NETHER_WART.getDefaultState().with(NetherWartBlock.AGE, 3);
+                return block == Blocks.NETHER_WART.getDefaultState().with(NetherWartBlock.AGE, 3);
             }
         }
         return false;
-	}
+    }
 
     private void doHarvest() {
         ServerWorld worldIn = (ServerWorld) this.strawgolem.world;
-        BlockPos pos = this.destinationBlock;
+        BlockPos pos = this.targetPos;
         Block block = worldIn.getBlockState(pos).getBlock();
-        if (shouldMoveTo(worldIn, this.destinationBlock)
-                && worldIn.destroyBlock(pos, true)
-                && StrawgolemConfig.isReplantEnabled()) {
-            if (!(block instanceof StemGrownBlock)) {
+        if (isTargetPos(worldIn, this.targetPos)
+                && worldIn.breakBlock(pos, true)
+                && ConfigHelperisReplantEnabled()) {
+            if (!(block instanceof GourdBlock)) {
                 worldIn.setBlockState(pos, block.getDefaultState());
-                List<ItemEntity> dropList = worldIn.getEntitiesWithinAABB(ItemEntity.class, new AxisAlignedBB(pos).grow(1.0F));
+                List<ItemEntity> dropList = worldIn.getEntities(ItemEntity.class, new Box(pos).expand(1.0F), e -> true);
                 for (ItemEntity drop : dropList) {
-                    if (StrawgolemConfig.isDeliveryEnabled() && !(drop.getItem().getItem() instanceof BlockNamedItem) || drop.getItem().getUseAction() == UseAction.EAT) {
-                        this.strawgolem.inventory.insertItem(0, drop.getItem(), false);
+                    if (ConfigHelperisDeliveryEnabled() && !(drop.getStack().getItem() instanceof BlockItem) || drop.getStack().getUseAction() == UseAction.EAT) {
+                        this.strawgolem.inventory.insertItem(0, drop.getStack(), false);
                     }
-                    drop.remove(false);
+                    drop.remove();
                 }
             } else {
-                if (StrawgolemConfig.isDeliveryEnabled()) {
-                    strawgolem.inventory.insertItem(0, new ItemStack(Item.BLOCK_TO_ITEM.getOrDefault(block, Items.AIR)), false);
+                if (ConfigHelperisDeliveryEnabled()) {
+                    strawgolem.inventory.insertItem(0, new ItemStack(Item.BLOCK_ITEMS.getOrDefault(block, Items.AIR)), false);
                 }
-                List<ItemEntity> dropList = worldIn.getEntitiesWithinAABB(ItemEntity.class, new AxisAlignedBB(pos).grow(1.0F));
+                List<ItemEntity> dropList = worldIn.getEntities(ItemEntity.class, new Box(pos).expand(1.0F), e -> true);
                 for (ItemEntity drop : dropList) {
-                    drop.remove(false);
+                    drop.remove();
                 }
             }
         }
