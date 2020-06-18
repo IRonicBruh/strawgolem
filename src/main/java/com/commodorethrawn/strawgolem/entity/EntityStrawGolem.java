@@ -47,10 +47,10 @@ public class EntityStrawGolem extends GolemEntity {
         return LOOT;
     }
 
-    public EntityStrawGolem(EntityType<? extends EntityStrawGolem> type, World worldIn) {
-		super(type, worldIn);
-		inventory = getCapability(InventoryProvider.CROP_SLOT, null).orElseThrow(() -> new IllegalArgumentException("cant be empty"));
-	}
+    public EntityStrawGolem(World worldIn) {
+        super(STRAW_GOLEM, worldIn);
+        inventory = getCapability(InventoryProvider.CROP_SLOT, null).orElseThrow(() -> new IllegalArgumentException("cant be empty"));
+    }
 
     @Override
     protected void initAttributes() {
