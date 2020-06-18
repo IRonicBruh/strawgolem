@@ -10,6 +10,7 @@ public class Strawgolem implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        config = ConfigManager.loadConfig(ConfigHelperclass);
+        config = ConfigManager.loadConfig(StrawgolemConfig.class);
+
     }
 }

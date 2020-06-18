@@ -9,11 +9,10 @@ import com.commodorethrawn.strawgolem.entity.capability.lifespan.ILifespan;
 import com.commodorethrawn.strawgolem.entity.capability.lifespan.LifespanProvider;
 import com.commodorethrawn.strawgolem.entity.capability.memory.IMemory;
 import com.commodorethrawn.strawgolem.entity.capability.memory.MemoryProvider;
+import net.fabricmc.fabric.api.object.builder.v1.entity.FabricEntityTypeBuilder;
 import net.minecraft.block.Block;
 import net.minecraft.block.GourdBlock;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.ItemEntity;
+import net.minecraft.entity.*;
 import net.minecraft.entity.ai.goal.FleeEntityGoal;
 import net.minecraft.entity.ai.goal.LookAroundGoal;
 import net.minecraft.entity.ai.goal.LookAtEntityGoal;
@@ -26,10 +25,17 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.registry.Registry;
 import net.minecraft.world.World;
-import net.minecraftforge.items.IItemHandler;
 
 public class EntityStrawGolem extends GolemEntity {
+
+    public static final EntityType<EntityStrawGolem> STRAW_GOLEM =
+            Registry.register(
+                    Registry.ENTITY_TYPE,
+                    new Identifier(Strawgolem.MODID, "strawgolem"),
+                    FabricEntityTypeBuilder.create(EntityCategory.CREATURE, EntityStrawGolem::new).dimensions(EntityDimensions.fixed(0.6F, 0.9F)).build()
+            );
 
     public static final Identifier LOOT = new Identifier(Strawgolem.MODID, "strawgolem");
     public IItemHandler inventory;
