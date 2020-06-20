@@ -4,9 +4,7 @@ import com.commodorethrawn.strawgolem.Strawgolem;
 import com.commodorethrawn.strawgolem.entity.ai.GolemDeliverGoal;
 import com.commodorethrawn.strawgolem.entity.ai.GolemHarvestGoal;
 import com.commodorethrawn.strawgolem.entity.ai.GolemWanderGoal;
-import com.commodorethrawn.strawgolem.entity.capability.InventoryProvider;
 import com.commodorethrawn.strawgolem.entity.capability.lifespan.ILifespan;
-import com.commodorethrawn.strawgolem.entity.capability.lifespan.LifespanProvider;
 import com.commodorethrawn.strawgolem.entity.capability.memory.IMemory;
 import com.commodorethrawn.strawgolem.entity.capability.memory.MemoryProvider;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricEntityTypeBuilder;
@@ -19,10 +17,14 @@ import net.minecraft.entity.ai.goal.LookAtEntityGoal;
 import net.minecraft.entity.ai.goal.SwimGoal;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.damage.DamageSource;
+import net.minecraft.entity.data.DataTracker;
+import net.minecraft.entity.data.TrackedData;
+import net.minecraft.entity.data.TrackedDataHandlerRegistry;
 import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.passive.GolemEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.registry.Registry;
@@ -38,7 +40,8 @@ public class EntityStrawGolem extends GolemEntity {
             );
 
     public static final Identifier LOOT = new Identifier(Strawgolem.MODID, "strawgolem");
-    public IItemHandler inventory;
+    private static final TrackedData<ItemStack> ITEM = DataTracker.registerData(EntityStrawGolem.class, TrackedDataHandlerRegistry.ITEM_STACK);
+    private static final TrackedData<Integer> LIFE = DataTracker.registerData(EntityStrawGolem.class, TrackedDataHandlerRegistry.INTEGER);
     private ILifespan lifespan;
     private IMemory memory;
 
@@ -47,10 +50,10 @@ public class EntityStrawGolem extends GolemEntity {
         return LOOT;
     }
 
-    public EntityStrawGolem(World worldIn) {
-        super(STRAW_GOLEM, worldIn);
-        inventory = getCapability(InventoryProvider.CROP_SLOT, null).orElseThrow(() -> new IllegalArgumentException("cant be empty"));
+    public EntityStrawGolem(EntityType type, World worldIn) {
+        super(type, worldIn);
     }
+
 
     @Override
     protected void initAttributes() {
@@ -73,19 +76,24 @@ public class EntityStrawGolem extends GolemEntity {
     }
 
     @Override
+    protected void initDataTracker() {
+        super.initDataTracker();
+        this.getDataTracker().startTracking(ITEM, ItemStack.EMPTY);
+        this.getDataTracker().startTracking(LIFE, 0);
+    }
+
+    @Override
     public void baseTick() {
         super.baseTick();
 
         if (memory == null)
             memory = getCapability(MemoryProvider.MEMORY_CAP, null).orElseThrow(() -> new IllegalArgumentException("cant be empty"));
 
-        if (lifespan == null)
-            lifespan = getCapability(LifespanProvider.LIFESPAN_CAP, null).orElseThrow(() -> new IllegalArgumentException("cant be empty"));
+        int currentLife = dataTracker.get(LIFE);
+        if (holdingBlockCrop()) ++currentLife;
+        dataTracker.set(LIFE, ++currentLife);
 
-        lifespan.update();
-        if (holdingBlockCrop()) lifespan.update();
-
-        if (lifespan.isOver())
+        if (currentLife >= Strawgolem.config.lifespan)
             damage(DamageSource.MAGIC, getMaximumHealth() * 100);
     }
 
@@ -96,25 +104,47 @@ public class EntityStrawGolem extends GolemEntity {
         super.onDeath(source);
     }
 
-    @Override
-    public boolean cannotDespawn() {
-        return true;
-    }
-
     public boolean isHandEmpty() {
         return getEquippedStack(EquipmentSlot.MAINHAND).isEmpty();
+    }
+
+    public boolean holdingBlockCrop() {
+        return Block.getBlockFromItem(getEquippedStack(EquipmentSlot.MAINHAND).getItem()) instanceof GourdBlock;
     }
 
     @Override
     public ItemStack getEquippedStack(EquipmentSlot slot) {
         if (slot == EquipmentSlot.MAINHAND) {
-            return inventory.getStackInSlot(0);
+            return this.dataTracker.get(ITEM);
         }
         return ItemStack.EMPTY;
     }
 
-    public boolean holdingBlockCrop() {
-        return Block.getBlockFromItem(inventory.getStackInSlot(0).getItem()) instanceof GourdBlock;
+    public void setEquippedStack(EquipmentSlot slot, ItemStack stack) {
+        if (slot == EquipmentSlot.MAINHAND) {
+            this.dataTracker.set(ITEM, stack);
+        }
+    }
+
+    @Override
+    public boolean cannotDespawn() {
+        return true;
+    }
+
+    @Override
+    public void writeCustomDataToTag(CompoundTag tag) {
+        super.writeCustomDataToTag(tag);
+        ItemStack stack = getEquippedStack(EquipmentSlot.MAINHAND);
+        tag.put("carriedStack", stack.getTag());
+        tag.putInt("lifetime", dataTracker.get(LIFE));
+    }
+
+    @Override
+    public void readCustomDataFromTag(CompoundTag tag) {
+        super.readCustomDataFromTag(tag);
+        ItemStack stack = ItemStack.fromTag(tag.getCompound("carriedStack"));
+        setEquippedStack(EquipmentSlot.MAINHAND, stack);
+        dataTracker.set(LIFE, tag.getInt("lifetime"));
     }
 
     public void addChestPos(BlockPos pos) {

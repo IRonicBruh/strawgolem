@@ -23,7 +23,7 @@ public class Strawgolem implements ModInitializer {
                     || (block == Blocks.HAY_BLOCK && blockDown == Blocks.CARVED_PUMPKIN)) {
                 world.setBlockState(pos.down(), Blocks.AIR.getDefaultState());
                 world.setBlockState(pos, Blocks.AIR.getDefaultState());
-                EntityStrawGolem golem = new EntityStrawGolem(world);
+                EntityStrawGolem golem = new EntityStrawGolem(EntityStrawGolem.STRAW_GOLEM, world);
                 golem.setPos(pos.getX() + 0.5D, pos.getY() - 1.0D, pos.getZ() + 0.5D);
                 world.spawnEntity(golem);
             }
